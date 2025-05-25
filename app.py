@@ -1,13 +1,14 @@
 from flask import Flask, render_template, jsonify
 from apscheduler.schedulers.background import BackgroundScheduler
-import csv, datetime, os, requests, re, threading, urllib3, json, unicodedata
+import csv, datetime, os, requests, threading, urllib3, json, unicodedata, re
 from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 
-# Wyłącz ostrzeżenia SSL
+# Wyłączamy ostrzeżenia SSL
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# “Norge” + 5 największych regionów (kody Finn.no)
 cities = {
     "Norge":           "",
     "Oslo":            "0.20061",
@@ -23,9 +24,12 @@ categories = {
     "tomter":      "3"
 }
 
-headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+}
 
 def slugify(name):
+    """Usuń diakrytyki i zamień na slug (np. 'Møre og Romsdal' → 'more-og-romsdal')."""
     nfkd = unicodedata.normalize('NFKD', name)
     no_acc = "".join(c for c in nfkd if unicodedata.category(c) != 'Mn')
     return re.sub(r'[^a-zA-Z0-9]+', '-', no_acc).strip('-').lower()
@@ -49,61 +53,43 @@ def scrape_finn(city_code, cat_code):
     return 0
 
 def scrape_hjem(city_name, category_name):
-    cat_slug = {"leiligheter":"leilighet","eneboliger":"enebolig","tomter":"tomt"}[category_name]
-    if city_name == "Norge":
-        url = f"https://hjem.no/kjop/{cat_slug}"
-    else:
-        city_slug = slugify(city_name)
-        url = f"https://hjem.no/kjop/{city_slug}/{cat_slug}"
+    """
+    Pobiera totalCount z oficjalnego API Hjem.no:
+    https://hjem.no/api/v1/listings/search?availability=available&propertyType=<slug>&region=<slug>
+    """
+    # Kategoria: leilighet, enebolig, tomt
+    cat_map = {"leiligheter":"leilighet","eneboliger":"enebolig","tomter":"tomt"}
+    cat_slug = cat_map[category_name]
+    params = {
+        "availability": "available",
+        "propertyType": cat_slug,
+        "pageSize": 1,
+        "page": 1
+    }
+    if city_name != "Norge":
+        params["region"] = slugify(city_name)
+
+    url = "https://hjem.no/api/v1/listings/search"
     try:
-        r = requests.get(url, headers=headers, timeout=10, verify=False)
+        r = requests.get(url, headers=headers, params=params, timeout=10, verify=False)
         r.raise_for_status()
-        soup = BeautifulSoup(r.text, "html.parser")
-
-        # 1) meta head:count
-        meta_cnt = soup.find("meta", {"name": "head:count"})
-        if meta_cnt and meta_cnt.get("content"):
-            digits = re.sub(r'\D', '', meta_cnt["content"])
-            if digits:
-                return int(digits)
-
-        # 2) <h2> fallback
-        h2 = soup.find("h2")
-        if h2:
-            d = ''.join(filter(str.isdigit, h2.text))
-            if d:
-                return int(d)
-
-        # 3) meta-description fallback
-        meta = soup.find("meta", {"name": "description"})
-        if meta and "annonser" in meta.get("content",""):
-            m = re.search(r"([\d\s\u00a0]+)", meta["content"])
-            if m:
-                return int(m.group(1).replace("\xa0","").replace(" ",""))
-
-        # 4) JSON-LD fallback
-        ld = soup.find("script", type="application/ld+json")
-        if ld:
-            try:
-                j = json.loads(ld.string)
-                if isinstance(j, dict) and j.get("numberOfItems"):
-                    return int(j["numberOfItems"])
-            except Exception:
-                pass
-
+        data = r.json()
+        return int(data.get("totalCount", 0))
     except Exception as e:
-        print(f"[Hjem] {url} error: {e}")
+        print(f"[Hjem-API] {url} params={params} error: {e}")
     return 0
 
 def scrape_data():
     today = datetime.date.today().isoformat()
-    fn = "data.csv"
-    fields = ["date","city","category","finn","hjem","total"]
-    if not os.path.exists(fn):
-        with open(fn, "w", newline="") as f:
-            csv.DictWriter(f, fieldnames=fields).writeheader()
-    with open(fn, "a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fields)
+    filename = "data.csv"
+    fieldnames = ["date","city","category","finn","hjem","total"]
+
+    if not os.path.exists(filename):
+        with open(filename, "w", newline="") as f:
+            csv.DictWriter(f, fieldnames=fieldnames).writeheader()
+
+    with open(filename, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         for city, code in cities.items():
             for cat, catcode in categories.items():
                 finn_cnt = scrape_finn(code, catcode)
@@ -117,6 +103,7 @@ def scrape_data():
                     "total": finn_cnt + hjem_cnt
                 })
 
+# Harmonogram: codziennie o 6:00
 scheduler = BackgroundScheduler()
 scheduler.add_job(scrape_data, 'cron', hour=6)
 scheduler.start()
@@ -132,8 +119,9 @@ def data():
 
 @app.route("/force-scrape")
 def force_scrape():
+    # uruchamiamy scraper w tle, aby endpoint nie timeoutował
     threading.Thread(target=scrape_data).start()
     return "Scraping uruchomiony w tle.", 202
 
-# Uruchom przy starcie
+# Pierwsze uruchomienie na starcie
 scrape_data()
