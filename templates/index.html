@@ -8,9 +8,10 @@
     body { font-family: sans-serif; margin: 30px; background: #f7f7f7; }
     .controls { display: flex; gap: 20px; margin-bottom: 20px; }
     select, button { padding: 8px; font-size: 14px; }
-    .stats { display: flex; gap: 20px; margin-bottom: 20px; }
-    .stat { background: white; padding: 12px; border-radius: 8px; box-shadow: 0 0 6px rgba(0,0,0,0.1); }
-    canvas { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 0 10px rgba(0,0,0,0.05); width: 100% !important; height: 400px !important; }
+    .charts { display: grid; grid-template-columns: 1fr; gap: 40px; }
+    .chart-block { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 0 10px rgba(0,0,0,0.05); }
+    .chart-block h2 { margin-bottom: 10px; }
+    canvas { width: 100% !important; height: 300px !important; }
   </style>
 </head>
 <body>
@@ -34,15 +35,20 @@
     <button id="refresh">Oppdater</button>
   </div>
 
-  <div class="stats">
-    <div class="stat"><strong>ATH:</strong> <span id="stat-ath">–</span></div>
-    <div class="stat"><strong>Daglig:</strong> <span id="stat-daily">–</span></div>
-    <div class="stat"><strong>Ukentlig:</strong> <span id="stat-weekly">–</span></div>
-    <div class="stat"><strong>Månedlig:</strong> <span id="stat-monthly">–</span></div>
-    <div class="stat"><strong>Årlig:</strong> <span id="stat-yearly">–</span></div>
+  <div class="charts">
+    <div class="chart-block">
+      <h2>Finn.no</h2>
+      <canvas id="chartFinn"></canvas>
+    </div>
+    <div class="chart-block">
+      <h2>Hjem.no</h2>
+      <canvas id="chartHjem"></canvas>
+    </div>
+    <div class="chart-block">
+      <h2>Totalt</h2>
+      <canvas id="chartTotal"></canvas>
+    </div>
   </div>
-
-  <canvas id="chart"></canvas>
 
   <script>
     async function loadData() {
@@ -82,50 +88,38 @@
       };
     }
 
-    function calcStats(series) {
-      const arr = series.total;
-      const n = arr.length;
-      if (n === 0) return {};
-      const ath = Math.max(...arr);
-      const last = arr[n-1];
-      function ch(days) {
-        if (n-1-days < 0) return '–';
-        const diff = last - arr[n-1-days];
-        return (diff>0?'+':'') + diff;
-      }
-      return {
-        ath, daily:ch(1), weekly:ch(7), monthly:ch(30), yearly:ch(365)
-      };
-    }
+    let chartFinn, chartHjem, chartTotal;
 
-    let chart;
     async function draw() {
       const raw = await loadData();
       const city = document.getElementById('cityFilter').value;
       const cat  = document.getElementById('catFilter').value;
       const filtered = filterData(raw, city, cat);
       const series = aggregate(filtered);
-      const stats = calcStats(series);
 
-      document.getElementById('stat-ath').textContent = stats.ath ?? '–';
-      document.getElementById('stat-daily').textContent = stats.daily ?? '–';
-      document.getElementById('stat-weekly').textContent = stats.weekly ?? '–';
-      document.getElementById('stat-monthly').textContent = stats.monthly ?? '–';
-      document.getElementById('stat-yearly').textContent = stats.yearly ?? '–';
-
-      const data = {
-        labels: series.labels,
-        datasets: [
-          { label:'Finn.no', data:series.finn, borderColor:'blue', fill:false, tension:0.1 },
-          { label:'Hjem.no', data:series.hjem, borderColor:'green', fill:false, tension:0.1 },
-          { label:'Totalt', data:series.total, borderColor:'pink', backgroundColor:'rgba(255,192,203,0.2)', fill:true, tension:0.1 }
-        ]
+      const cfgFinn = {
+        type: 'line',
+        data: { labels: series.labels, datasets: [{ label: 'Finn.no', data: series.finn, borderColor: 'blue', fill: false, tension: 0.1 }] },
+        options: { responsive: true, scales: { x: { grid: false }, y: { grid: false } } }
+      };
+      const cfgHjem = {
+        type: 'line',
+        data: { labels: series.labels, datasets: [{ label: 'Hjem.no', data: series.hjem, borderColor: 'green', fill: false, tension: 0.1 }] },
+        options: { responsive: true, scales: { x: { grid: false }, y: { grid: false } } }
+      };
+      const cfgTotal = {
+        type: 'line',
+        data: { labels: series.labels, datasets: [{ label: 'Totalt', data: series.total, borderColor: 'pink', backgroundColor: 'rgba(255,192,203,0.2)', fill: true, tension: 0.1 }] },
+        options: { responsive: true, scales: { x: { grid: false }, y: { grid: false } } }
       };
 
-      const cfg = { type:'line', data, options:{ responsive:true, scales:{ x:{ grid:false }, y:{ grid:false } } } };
+      if (chartFinn) chartFinn.destroy();
+      if (chartHjem) chartHjem.destroy();
+      if (chartTotal) chartTotal.destroy();
 
-      if (chart) chart.destroy();
-      chart = new Chart(document.getElementById('chart').getContext('2d'), cfg);
+      chartFinn = new Chart(document.getElementById('chartFinn').getContext('2d'), cfgFinn);
+      chartHjem = new Chart(document.getElementById('chartHjem').getContext('2d'), cfgHjem);
+      chartTotal = new Chart(document.getElementById('chartTotal').getContext('2d'), cfgTotal);
     }
 
     document.getElementById('refresh').addEventListener('click', draw);
