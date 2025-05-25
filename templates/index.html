@@ -99,26 +99,59 @@
 
       const cfgFinn = {
         type: 'line',
-        data: { labels: series.labels, datasets: [{ label: 'Finn.no', data: series.finn, borderColor: 'blue', fill: false, tension: 0.1 }] },
+        data: {
+          labels: series.labels,
+          datasets: [{
+            label: 'Finn.no',
+            data: series.finn,
+            borderColor: 'blue',
+            fill: false,
+            tension: 0.1,
+            pointRadius: 5
+          }]
+        },
         options: { responsive: true, scales: { x: { grid: false }, y: { grid: false } } }
       };
+
       const cfgHjem = {
         type: 'line',
-        data: { labels: series.labels, datasets: [{ label: 'Hjem.no', data: series.hjem, borderColor: 'green', fill: false, tension: 0.1 }] },
+        data: {
+          labels: series.labels,
+          datasets: [{
+            label: 'Hjem.no',
+            data: series.hjem,
+            borderColor: 'green',
+            fill: false,
+            tension: 0.1,
+            pointRadius: 5
+          }]
+        },
         options: { responsive: true, scales: { x: { grid: false }, y: { grid: false } } }
       };
+
       const cfgTotal = {
         type: 'line',
-        data: { labels: series.labels, datasets: [{ label: 'Totalt', data: series.total, borderColor: 'pink', backgroundColor: 'rgba(255,192,203,0.2)', fill: true, tension: 0.1 }] },
+        data: {
+          labels: series.labels,
+          datasets: [{
+            label: 'Totalt',
+            data: series.total,
+            borderColor: 'pink',
+            backgroundColor: 'rgba(255,192,203,0.2)',
+            fill: true,
+            tension: 0.1,
+            pointRadius: 5
+          }]
+        },
         options: { responsive: true, scales: { x: { grid: false }, y: { grid: false } } }
       };
 
-      if (chartFinn) chartFinn.destroy();
-      if (chartHjem) chartHjem.destroy();
+      if (chartFinn)  chartFinn.destroy();
+      if (chartHjem)  chartHjem.destroy();
       if (chartTotal) chartTotal.destroy();
 
-      chartFinn = new Chart(document.getElementById('chartFinn').getContext('2d'), cfgFinn);
-      chartHjem = new Chart(document.getElementById('chartHjem').getContext('2d'), cfgHjem);
+      chartFinn  = new Chart(document.getElementById('chartFinn').getContext('2d'), cfgFinn);
+      chartHjem  = new Chart(document.getElementById('chartHjem').getContext('2d'), cfgHjem);
       chartTotal = new Chart(document.getElementById('chartTotal').getContext('2d'), cfgTotal);
     }
 
