@@ -54,7 +54,8 @@
     async function loadData() {
       const res = await fetch('/data');
       const raw = await res.json();
-      return raw.map(r=>({
+      console.log('raw /data →', raw);
+      return raw.map(r => ({
         date: r.date,
         city: r.city,
         category: r.category,
@@ -65,27 +66,29 @@
     }
 
     function filterData(data, city, cat) {
-      return data.filter(d=>
+      return data.filter(d =>
         d.city === city &&
-        (cat==='ALL' || d.category===cat)
+        (cat === 'ALL' || d.category === cat)
       );
     }
 
     function aggregate(data) {
       const byDate = {};
-      data.forEach(d=>{
-        if(!byDate[d.date]) byDate[d.date]={finn:0,hjem:0,total:0};
+      data.forEach(d => {
+        if (!byDate[d.date]) byDate[d.date] = { finn:0, hjem:0, total:0 };
         byDate[d.date].finn += d.finn;
         byDate[d.date].hjem += d.hjem;
         byDate[d.date].total += d.total;
       });
       const dates = Object.keys(byDate).sort();
-      return {
+      const series = {
         labels: dates,
-        finn: dates.map(d=>byDate[d].finn),
-        hjem: dates.map(d=>byDate[d].hjem),
-        total: dates.map(d=>byDate[d].total)
+        finn: dates.map(d => byDate[d].finn),
+        hjem: dates.map(d => byDate[d].hjem),
+        total: dates.map(d => byDate[d].total)
       };
+      console.log('aggregated series →', series);
+      return series;
     }
 
     let chartFinn, chartHjem, chartTotal;
@@ -97,19 +100,34 @@
       const filtered = filterData(raw, city, cat);
       const s = aggregate(filtered);
 
-      const cfg = (label, data, color, fill=false) => ({
+      const makeCfg = (label, dataArr, color, fill=false) => ({
         type: 'line',
-        data: { labels: s.labels, datasets: [{ label, data, borderColor: color, backgroundColor: fill?color+'33':undefined, fill, tension:0.1, pointRadius:5 }] },
-        options:{responsive:true,scales:{x:{grid:false},y:{grid:false}}}
+        data: { labels: s.labels, datasets: [{
+          label,
+          data: dataArr,
+          borderColor: color,
+          backgroundColor: fill ? color + '33' : undefined,
+          fill,
+          tension: 0.1,
+          pointRadius: 5
+        }]},
+        options: {
+          responsive: true,
+          scales: {
+            x: { grid: false },
+            y: { grid: false, beginAtZero: true }
+          }
+        }
       });
 
-      if(chartFinn) chartFinn.destroy();
-      if(chartHjem) chartHjem.destroy();
-      if(chartTotal) chartTotal.destroy();
+      [chartFinn, chartHjem, chartTotal].forEach(c => c && c.destroy());
 
-      chartFinn  = new Chart(document.getElementById('chartFinn').getContext('2d'), cfg('Finn.no',  s.finn,  'blue'));
-      chartHjem  = new Chart(document.getElementById('chartHjem').getContext('2d'), cfg('Hjem.no',  s.hjem,  'green'));
-      chartTotal = new Chart(document.getElementById('chartTotal').getContext('2d'), cfg('Totalt',   s.total, 'pink', true));
+      chartFinn  = new Chart(document.getElementById('chartFinn').getContext('2d'),
+                             makeCfg('Finn.no', s.finn, 'blue'));
+      chartHjem  = new Chart(document.getElementById('chartHjem').getContext('2d'),
+                             makeCfg('Hjem.no', s.hjem, 'green'));
+      chartTotal = new Chart(document.getElementById('chartTotal').getContext('2d'),
+                             makeCfg('Totalt', s.total, 'pink', true));
     }
 
     document.getElementById('refresh').addEventListener('click', draw);
