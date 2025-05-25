@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 
-# Lista miast i odpowiadające im parametry lokalizacji
+# Lista miast
 cities = {
     "Oslo": "0.20061",
     "Bergen": "0.23346",
@@ -29,23 +29,25 @@ headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
 }
 
-# Scraper dla Finn.no
+# Scraper FINN.no – NOWY sposób
 def scrape_finn(city_code, category_code):
     url = f"https://www.finn.no/realestate/homes/search.html?location={city_code}&property_type={category_code}"
     try:
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
-        meta_tag = soup.find("meta", {"name": "description"})
-        if meta_tag and "annonser" in meta_tag.get("content", ""):
-            text = meta_tag["content"]
-            number = int(''.join(filter(str.isdigit, text.split(" annonser")[0])))
-            return number
+        meta = soup.find("meta", {"name": "description"})
+        if meta:
+            content = meta.get("content", "")
+            for part in content.split():
+                part = part.replace(" ", "")
+                if part.isdigit():
+                    return int(part)
     except Exception as e:
         print(f"Finn scraping error: {e}")
     return 0
 
-# Scraper dla Hjem.no
+# Scraper Hjem.no (z nagłówkiem + debug)
 def scrape_hjem(city_name, category_name):
     cat_map = {
         "leiligheter": "leilighet",
@@ -65,7 +67,7 @@ def scrape_hjem(city_name, category_name):
         print(f"Hjem scraping error: {e}")
     return 0
 
-# Główna funkcja scrapująca dane
+# Funkcja scrapująca dane
 def scrape_data():
     today = datetime.date.today().isoformat()
     filename = "data.csv"
@@ -83,6 +85,7 @@ def scrape_data():
                 finn_count = scrape_finn(city_code, category_code)
                 hjem_count = scrape_hjem(city, category)
                 total = finn_count + hjem_count
+                print(f"{city} / {category}: Finn={finn_count}, Hjem={hjem_count}")
                 writer.writerow({
                     "date": today,
                     "city": city,
@@ -92,7 +95,7 @@ def scrape_data():
                     "total": total
                 })
 
-# Harmonogram
+# Harmonogram codzienny
 scheduler = BackgroundScheduler()
 scheduler.add_job(scrape_data, 'cron', hour=6)
 scheduler.start()
