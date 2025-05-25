@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <title>Boliger til salgs i Norge</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 20px; }
+    canvas { max-width: 100%; }
+    #chart-container { width: 100%; max-width: 900px; margin: auto; }
+  </style>
+</head>
+<body>
+  <h1>Boliger til salgs i Norge</h1>
+  <label for="by">By:</label>
+  <select id="by"></select>
+
+  <label for="kategori">Kategori:</label>
+  <select id="kategori">
+    <option value="leiligheter">Leiligheter</option>
+    <option value="eneboliger">Eneboliger</option>
+    <option value="tomter">Tomter</option>
+  </select>
+
+  <label for="visning">Visning:</label>
+  <select id="visning">
+    <option value="total">Totalt</option>
+    <option value="kilde">Etter kilde</option>
+  </select>
+
+  <div id="chart-container">
+    <canvas id="myChart"></canvas>
+  </div>
+
+  <script>
+    let chart;
+    async function fetchData() {
+      const response = await fetch("/data");
+      return await response.json();
+    }
+
+    function updateChart(data, city, category, mode) {
+      const filtered = data.filter(row => row.city === city && row.category === category);
+      const labels = filtered.map(row => row.date);
+      const finn = filtered.map(row => Number(row.finn));
+      const hjem = filtered.map(row => Number(row.hjem));
+      const total = filtered.map(row => Number(row.total));
+
+      const datasets = mode === "total"
+        ? [{ label: "Totalt", data: total, fill: true, borderColor: "pink", backgroundColor: "rgba(255,192,203,0.2)" }]
+        : [
+            { label: "Finn.no", data: finn, borderColor: "blue", fill: false },
+            { label: "Hjem.no", data: hjem, borderColor: "green", fill: false }
+          ];
+
+      if (chart) chart.destroy();
+      const ctx = document.getElementById("myChart").getContext("2d");
+      chart = new Chart(ctx, {
+        type: "line",
+        data: { labels, datasets },
+        options: {
+          plugins: { legend: { display: true } },
+          scales: { x: { grid: { display: false } }, y: { grid: { display: false } } }
+        }
+      });
+    }
+
+    async function init() {
+      const data = await fetchData();
+      const uniqueCities = [...new Set(data.map(row => row.city))];
+      const citySelect = document.getElementById("by");
+      uniqueCities.forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c; opt.textContent = c;
+        citySelect.appendChild(opt);
+      });
+      citySelect.value = uniqueCities[0];
+      document.getElementById("kategori").value = "leiligheter";
+      document.getElementById("visning").value = "total";
+
+      function render() {
+        const city = citySelect.value;
+        const category = document.getElementById("kategori").value;
+        const mode = document.getElementById("visning").value;
+        updateChart(data, city, category, mode);
+      }
+
+      document.getElementById("by").addEventListener("change", render);
+      document.getElementById("kategori").addEventListener("change", render);
+      document.getElementById("visning").addEventListener("change", render);
+      render();
+    }
+
+    init();
+  </script>
+</body>
+</html>
