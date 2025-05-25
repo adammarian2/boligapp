@@ -1,5 +1,5 @@
 Flask
+gunicorn
 APScheduler
 requests
 beautifulsoup4
-gunicorn
