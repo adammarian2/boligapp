@@ -54,7 +54,7 @@
     async function loadData() {
       const res = await fetch('/data');
       const raw = await res.json();
-      console.log('raw /data →', raw);
+      console.log('raw data:', raw);
       return raw.map(r => ({
         date: r.date,
         city: r.city,
@@ -87,7 +87,7 @@
         hjem: dates.map(d => byDate[d].hjem),
         total: dates.map(d => byDate[d].total)
       };
-      console.log('aggregated series →', series);
+      console.log('series:', series);
       return series;
     }
 
@@ -102,15 +102,18 @@
 
       const makeCfg = (label, dataArr, color, fill=false) => ({
         type: 'line',
-        data: { labels: s.labels, datasets: [{
-          label,
-          data: dataArr,
-          borderColor: color,
-          backgroundColor: fill ? color + '33' : undefined,
-          fill,
-          tension: 0.1,
-          pointRadius: 5
-        }]},
+        data: {
+          labels: s.labels,
+          datasets: [{
+            label,
+            data: dataArr,
+            borderColor: color,
+            backgroundColor: fill ? color + '33' : undefined,
+            fill,
+            tension: 0.1,
+            pointRadius: 5
+          }]
+        },
         options: {
           responsive: true,
           scales: {
@@ -123,11 +126,11 @@
       [chartFinn, chartHjem, chartTotal].forEach(c => c && c.destroy());
 
       chartFinn  = new Chart(document.getElementById('chartFinn').getContext('2d'),
-                             makeCfg('Finn.no', s.finn, 'blue'));
+                             makeCfg('Finn.no',  s.finn,  'blue'));
       chartHjem  = new Chart(document.getElementById('chartHjem').getContext('2d'),
-                             makeCfg('Hjem.no', s.hjem, 'green'));
+                             makeCfg('Hjem.no',  s.hjem,  'green'));
       chartTotal = new Chart(document.getElementById('chartTotal').getContext('2d'),
-                             makeCfg('Totalt', s.total, 'pink', true));
+                             makeCfg('Totalt',   s.total, 'pink', true));
     }
 
     document.getElementById('refresh').addEventListener('click', draw);
