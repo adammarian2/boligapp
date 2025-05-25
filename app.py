@@ -1,6 +1,6 @@
 from flask import Flask, render_template, jsonify
 from apscheduler.schedulers.background import BackgroundScheduler
-import csv, datetime, os, requests, re, threading, urllib3, json
+import csv, datetime, os, requests, re, threading, urllib3, json, unicodedata
 from bs4 import BeautifulSoup
 
 app = Flask(__name__)
@@ -8,7 +8,6 @@ app = Flask(__name__)
 # Wyłącz ostrzeżenia SSL
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# “Norge” + 5 największych regionów (kody Finn.no)
 cities = {
     "Norge":           "",
     "Oslo":            "0.20061",
@@ -25,6 +24,13 @@ categories = {
 }
 
 headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+
+def slugify(name):
+    # usuń diakrytyki, zamień wszystko poza alfanum na '-', zbij do jednej myślnika
+    nfkd = unicodedata.normalize('NFKD', name)
+    no_acc = "".join(c for c in nfkd if unicodedata.category(c) != 'Mn')
+    slug = re.sub(r'[^a-zA-Z0-9]+', '-', no_acc).strip('-').lower()
+    return slug
 
 def scrape_finn(city_code, cat_code):
     if city_code:
@@ -46,17 +52,27 @@ def scrape_finn(city_code, cat_code):
     return 0
 
 def scrape_hjem(city_name, category_name):
-    slug = {"leiligheter":"leilighet","eneboliger":"enebolig","tomter":"tomt"}[category_name]
+    # slug kategorii
+    cat_slug = {"leiligheter":"leilighet","eneboliger":"enebolig","tomter":"tomt"}[category_name]
+    # zbuduj URL
     if city_name == "Norge":
-        url = f"https://www.hjem.no/kjop/{slug}"
+        url = f"https://hjem.no/kjop/{cat_slug}"
     else:
-        url = f"https://www.hjem.no/kjop/{city_name.lower()}/{slug}"
+        city_slug = slugify(city_name)
+        url = f"https://hjem.no/kjop/{city_slug}/{cat_slug}"
     try:
         r = requests.get(url, headers=headers, timeout=10, verify=False)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
 
-        # 1) meta description
+        # 1) <h2> z liczbą
+        h2 = soup.find("h2")
+        if h2:
+            digits = ''.join(filter(str.isdigit, h2.text))
+            if digits:
+                return int(digits)
+
+        # 2) meta-description
         meta = soup.find("meta", {"name": "description"})
         if meta and "annonser" in meta.get("content",""):
             txt = meta["content"]
@@ -64,7 +80,7 @@ def scrape_hjem(city_name, category_name):
             if m:
                 return int(m.group(1).replace("\xa0","").replace(" ",""))
 
-        # 2) JSON-LD fallback
+        # 3) JSON-LD fallback
         ld = soup.find("script", type="application/ld+json")
         if ld:
             try:
@@ -100,7 +116,7 @@ def scrape_data():
                     "total": finn_cnt + hjem_cnt
                 })
 
-# Harmonogram codzienny o 6:00
+# scheduler 6:00 codziennie
 scheduler = BackgroundScheduler()
 scheduler.add_job(scrape_data, 'cron', hour=6)
 scheduler.start()
@@ -119,5 +135,5 @@ def force_scrape():
     threading.Thread(target=scrape_data).start()
     return "Scraping uruchomiony w tle.", 202
 
-# Przy starcie
+# przy starcie
 scrape_data()
