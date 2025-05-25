@@ -2,7 +2,7 @@
 <html lang="no">
 <head>
   <meta charset="UTF-8" />
-  <title>Boliger til salgs – OLX-stil</title>
+  <title>Boliger til salgs</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body { font-family: sans-serif; margin: 30px; background: #f7f7f7; }
@@ -19,12 +19,12 @@
 
   <div class="controls">
     <select id="cityFilter">
-      <option value="ALL">Alle byer</option>
+      <option>Norge</option>
       <option>Oslo</option>
-      <option>Bergen</option>
-      <option>Stavanger</option>
-      <option>Trondheim</option>
-      <option>Drammen</option>
+      <option>Agder</option>
+      <option>Akershus</option>
+      <option>Møre og Romsdal</option>
+      <option>Trøndelag</option>
     </select>
     <select id="catFilter">
       <option value="ALL">Alle kategorier</option>
@@ -54,7 +54,7 @@
     async function loadData() {
       const res = await fetch('/data');
       const raw = await res.json();
-      return raw.map(r => ({
+      return raw.map(r=>({
         date: r.date,
         city: r.city,
         category: r.category,
@@ -65,16 +65,16 @@
     }
 
     function filterData(data, city, cat) {
-      return data.filter(d =>
-        (city === 'ALL' || d.city === city) &&
-        (cat === 'ALL' || d.category === cat)
+      return data.filter(d=>
+        d.city === city &&
+        (cat==='ALL' || d.category===cat)
       );
     }
 
     function aggregate(data) {
       const byDate = {};
-      data.forEach(d => {
-        if (!byDate[d.date]) byDate[d.date] = { finn:0, hjem:0, total:0 };
+      data.forEach(d=>{
+        if(!byDate[d.date]) byDate[d.date]={finn:0,hjem:0,total:0};
         byDate[d.date].finn += d.finn;
         byDate[d.date].hjem += d.hjem;
         byDate[d.date].total += d.total;
@@ -82,9 +82,9 @@
       const dates = Object.keys(byDate).sort();
       return {
         labels: dates,
-        finn: dates.map(d => byDate[d].finn),
-        hjem: dates.map(d => byDate[d].hjem),
-        total: dates.map(d => byDate[d].total)
+        finn: dates.map(d=>byDate[d].finn),
+        hjem: dates.map(d=>byDate[d].hjem),
+        total: dates.map(d=>byDate[d].total)
       };
     }
 
@@ -95,64 +95,21 @@
       const city = document.getElementById('cityFilter').value;
       const cat  = document.getElementById('catFilter').value;
       const filtered = filterData(raw, city, cat);
-      const series = aggregate(filtered);
+      const s = aggregate(filtered);
 
-      const cfgFinn = {
+      const cfg = (label, data, color, fill=false) => ({
         type: 'line',
-        data: {
-          labels: series.labels,
-          datasets: [{
-            label: 'Finn.no',
-            data: series.finn,
-            borderColor: 'blue',
-            fill: false,
-            tension: 0.1,
-            pointRadius: 5
-          }]
-        },
-        options: { responsive: true, scales: { x: { grid: false }, y: { grid: false } } }
-      };
+        data: { labels: s.labels, datasets: [{ label, data, borderColor: color, backgroundColor: fill?color+'33':undefined, fill, tension:0.1, pointRadius:5 }] },
+        options:{responsive:true,scales:{x:{grid:false},y:{grid:false}}}
+      });
 
-      const cfgHjem = {
-        type: 'line',
-        data: {
-          labels: series.labels,
-          datasets: [{
-            label: 'Hjem.no',
-            data: series.hjem,
-            borderColor: 'green',
-            fill: false,
-            tension: 0.1,
-            pointRadius: 5
-          }]
-        },
-        options: { responsive: true, scales: { x: { grid: false }, y: { grid: false } } }
-      };
+      if(chartFinn) chartFinn.destroy();
+      if(chartHjem) chartHjem.destroy();
+      if(chartTotal) chartTotal.destroy();
 
-      const cfgTotal = {
-        type: 'line',
-        data: {
-          labels: series.labels,
-          datasets: [{
-            label: 'Totalt',
-            data: series.total,
-            borderColor: 'pink',
-            backgroundColor: 'rgba(255,192,203,0.2)',
-            fill: true,
-            tension: 0.1,
-            pointRadius: 5
-          }]
-        },
-        options: { responsive: true, scales: { x: { grid: false }, y: { grid: false } } }
-      };
-
-      if (chartFinn)  chartFinn.destroy();
-      if (chartHjem)  chartHjem.destroy();
-      if (chartTotal) chartTotal.destroy();
-
-      chartFinn  = new Chart(document.getElementById('chartFinn').getContext('2d'), cfgFinn);
-      chartHjem  = new Chart(document.getElementById('chartHjem').getContext('2d'), cfgHjem);
-      chartTotal = new Chart(document.getElementById('chartTotal').getContext('2d'), cfgTotal);
+      chartFinn  = new Chart(document.getElementById('chartFinn').getContext('2d'), cfg('Finn.no',  s.finn,  'blue'));
+      chartHjem  = new Chart(document.getElementById('chartHjem').getContext('2d'), cfg('Hjem.no',  s.hjem,  'green'));
+      chartTotal = new Chart(document.getElementById('chartTotal').getContext('2d'), cfg('Totalt',   s.total, 'pink', true));
     }
 
     document.getElementById('refresh').addEventListener('click', draw);
