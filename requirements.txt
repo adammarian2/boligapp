@@ -1,0 +1,5 @@
+Flask
+APScheduler
+requests
+beautifulsoup4
+gunicorn
