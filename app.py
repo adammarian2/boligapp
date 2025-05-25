@@ -1,102 +1,90 @@
 from flask import Flask, render_template, jsonify, send_file
 from apscheduler.schedulers.background import BackgroundScheduler
-import csv
-import datetime
-import os
-import requests
+import csv, datetime, os, requests, re
 from bs4 import BeautifulSoup
-import re
 
 app = Flask(__name__)
 
-# Miasta (z kodami Finn.no)
+# “Norge” (główna strona) + 5 największych regionów
 cities = {
-    "Oslo": "0.20061",
-    "Bergen": "0.23346",
-    "Stavanger": "0.20216",
-    "Trondheim": "0.20084",
-    "Drammen": "0.20174"
+    "Norge":           "",        # pusty kod → główna strona FINN.no
+    "Oslo":            "0.20061",
+    "Agder":           "0.22042",
+    "Akershus":        "0.20003",
+    "Møre og Romsdal": "0.20015",
+    "Trøndelag":       "0.20016"
 }
 
-# Kategorie (mieszkania, domy, działki)
 categories = {
     "leiligheter": "1",
     "eneboliger": "2",
-    "tomter": "3"
+    "tomter":      "3"
 }
 
-# Nagłówki HTTP – udajemy przeglądarkę
-headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-}
+headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
-# Scraper FINN.no – działa z meta tagiem "description"
 def scrape_finn(city_code, category_code):
-    url = f"https://www.finn.no/realestate/homes/search.html?location={city_code}&property_type={category_code}"
+    # Jeśli city_code == "" → main page (Norge)
+    if city_code:
+        url = f"https://www.finn.no/realestate/homes/search.html?location={city_code}&property_type={category_code}"
+    else:
+        url = f"https://www.finn.no/realestate/homes/search.html?property_type={category_code}"
     try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
+        r = requests.get(url, headers=headers, timeout=10)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
         meta = soup.find("meta", {"name": "description"})
         if meta:
-            content = meta.get("content", "")
-            match = re.search(r"Du finner ([\d\s\u00a0]+) boliger", content)
-            if match:
-                number_str = match.group(1).replace("\xa0", "").replace(" ", "")
-                return int(number_str)
+            txt = meta["content"]
+            m = re.search(r"Du finner ([\d\s\u00a0]+) boliger", txt)
+            if m:
+                num = m.group(1).replace("\xa0","").replace(" ","")
+                return int(num)
     except Exception as e:
-        print(f"Finn scraping error: {e}")
+        print(f"[Finn] {url} → error: {e}")
     return 0
 
-# Scraper Hjem.no – może nadal zwracać 0
 def scrape_hjem(city_name, category_name):
-    cat_map = {
-        "leiligheter": "leilighet",
-        "eneboliger": "enebolig",
-        "tomter": "tomt"
-    }
-    category_slug = cat_map.get(category_name, category_name)
-    url = f"https://www.hjem.no/kjop/{city_name.lower()}/{category_slug}"
+    slug = {"leiligheter":"leilighet","eneboliger":"enebolig","tomter":"tomt"}[category_name]
+    # Jeśli city_name=="Norge" → bez miasta
+    if city_name == "Norge":
+        url = f"https://www.hjem.no/kjop/{slug}"
+    else:
+        url = f"https://www.hjem.no/kjop/{city_name.lower()}/{slug}"
     try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-        header = soup.find("h2")
-        if header:
-            return int(''.join(filter(str.isdigit, header.text)))
+        r = requests.get(url, headers=headers, timeout=10)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+        h2 = soup.find("h2")
+        if h2:
+            return int(''.join(filter(str.isdigit, h2.text)))
     except Exception as e:
-        print(f"Hjem scraping error: {e}")
+        print(f"[Hjem] {url} → error: {e}")
     return 0
 
-# Główna funkcja scrapująca dane
 def scrape_data():
     today = datetime.date.today().isoformat()
-    filename = "data.csv"
-    fieldnames = ["date", "city", "category", "finn", "hjem", "total"]
-
-    if not os.path.exists(filename):
-        with open(filename, mode='w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-
-    with open(filename, mode='a', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        for city, city_code in cities.items():
-            for category, category_code in categories.items():
-                finn_count = scrape_finn(city_code, category_code)
-                hjem_count = scrape_hjem(city, category)
-                total = finn_count + hjem_count
-                print(f"{city} / {category}: Finn={finn_count}, Hjem={hjem_count}")
+    fn = "data.csv"
+    fields = ["date","city","category","finn","hjem","total"]
+    if not os.path.exists(fn):
+        with open(fn, "w", newline="") as f:
+            csv.DictWriter(f, fieldnames=fields).writeheader()
+    with open(fn, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fields)
+        for city, code in cities.items():
+            for cat, catcode in categories.items():
+                finn_cnt = scrape_finn(code, catcode)
+                hjem_cnt = scrape_hjem(city, cat)
                 writer.writerow({
                     "date": today,
                     "city": city,
-                    "category": category,
-                    "finn": finn_count,
-                    "hjem": hjem_count,
-                    "total": total
+                    "category": cat,
+                    "finn": finn_cnt,
+                    "hjem": hjem_cnt,
+                    "total": finn_cnt + hjem_cnt
                 })
 
-# Harmonogram codzienny
+# Harmonogram
 scheduler = BackgroundScheduler()
 scheduler.add_job(scrape_data, 'cron', hour=6)
 scheduler.start()
@@ -106,21 +94,12 @@ def index():
     return render_template("index.html")
 
 @app.route("/data")
-def get_data():
-    filename = "data.csv"
-    rows = []
-    with open(filename, newline='') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            rows.append(row)
-    return jsonify(rows)
-
-@app.route("/export")
-def export():
-    return send_file("data.csv", as_attachment=True)
+def data():
+    with open("data.csv", newline="") as f:
+        return jsonify(list(csv.DictReader(f)))
 
 @app.route("/force-scrape")
-def force_scrape():
+def force():
     scrape_data()
     return "Scraping completed manually."
 
