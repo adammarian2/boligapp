@@ -24,21 +24,23 @@ categories = {
     "tomter": "3"
 }
 
-# Scraper dla Finn.no
+# Scraper dla Finn.no – z meta tagu description
 def scrape_finn(city_code, category_code):
     url = f"https://www.finn.no/realestate/homes/search.html?location={city_code}&property_type={category_code}"
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
-        count_element = soup.find("span", class_="hits")
-        if count_element:
-            return int(count_element.text.replace(" ", ""))
-    except:
-        return 0
+        meta_tag = soup.find("meta", {"name": "description"})
+        if meta_tag and "annonser" in meta_tag.get("content", ""):
+            text = meta_tag["content"]
+            number = int(''.join(filter(str.isdigit, text.split(" annonser")[0])))
+            return number
+    except Exception as e:
+        print(f"Finn scraping error: {e}")
     return 0
 
-# Scraper dla Hjem.no – szuka liczby ogłoszeń w nagłówku strony
+# Scraper dla Hjem.no
 def scrape_hjem(city_name, category_name):
     cat_map = {
         "leiligheter": "leilighet",
@@ -54,8 +56,8 @@ def scrape_hjem(city_name, category_name):
         header = soup.find("h2")
         if header:
             return int(''.join(filter(str.isdigit, header.text)))
-    except:
-        return 0
+    except Exception as e:
+        print(f"Hjem scraping error: {e}")
     return 0
 
 # Główna funkcja scrapująca dane
