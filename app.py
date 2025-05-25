@@ -5,10 +5,9 @@ from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 
-# wyłącz ostrzeżenia o InsecureRequestWarning
+# Wyłącz ostrzeżenia SSL
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# “Norge” + 5 największych regionów
 cities = {
     "Norge":           "",
     "Oslo":            "0.20061",
@@ -26,11 +25,11 @@ categories = {
 
 headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
-def scrape_finn(city_code, category_code):
+def scrape_finn(city_code, cat_code):
     if city_code:
-        url = f"https://www.finn.no/realestate/homes/search.html?location={city_code}&property_type={category_code}"
+        url = f"https://www.finn.no/realestate/homes/search.html?location={city_code}&property_type={cat_code}"
     else:
-        url = f"https://www.finn.no/realestate/homes/search.html?property_type={category_code}"
+        url = f"https://www.finn.no/realestate/homes/search.html?property_type={cat_code}"
     try:
         r = requests.get(url, headers=headers, timeout=10, verify=False)
         r.raise_for_status()
@@ -46,6 +45,7 @@ def scrape_finn(city_code, category_code):
     return 0
 
 def scrape_hjem(city_name, category_name):
+    # budujemy slug dla Hjem
     slug = {"leiligheter":"leilighet","eneboliger":"enebolig","tomter":"tomt"}[category_name]
     if city_name == "Norge":
         url = f"https://www.hjem.no/kjop/{slug}"
@@ -55,9 +55,14 @@ def scrape_hjem(city_name, category_name):
         r = requests.get(url, headers=headers, timeout=10, verify=False)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
-        h2 = soup.find("h2")
-        if h2:
-            return int(''.join(filter(str.isdigit, h2.text)))
+        # szukamy meta description
+        meta = soup.find("meta", {"name": "description"}) or soup.find("meta", {"property": "og:description"})
+        if meta:
+            txt = meta.get("content", "")
+            # wyciągamy pierwszą grupę cyfr
+            m = re.search(r"([\d\s\u00a0]+)", txt)
+            if m:
+                return int(m.group(1).replace("\xa0","").replace(" ",""))
     except Exception as e:
         print(f"[Hjem] {url} error: {e}")
     return 0
@@ -84,7 +89,7 @@ def scrape_data():
                     "total": finn_cnt + hjem_cnt
                 })
 
-# harmonogram codzienny
+# harmonogram
 scheduler = BackgroundScheduler()
 scheduler.add_job(scrape_data, 'cron', hour=6)
 scheduler.start()
@@ -99,10 +104,10 @@ def data():
         return jsonify(list(csv.DictReader(f)))
 
 @app.route("/force-scrape")
-def force_scrape():
-    # uruchamiamy w tle, żeby nie blokować workera
+def force():
+    # uruchom w tle żeby nie blokować
     threading.Thread(target=scrape_data).start()
-    return "Scraping started in background.", 202
+    return "Scraping uruchomiony w tle.", 202
 
-# Render uruchamia gunicorn app:app
+# przy starcie
 scrape_data()
