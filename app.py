@@ -5,10 +5,11 @@ import datetime
 import os
 import requests
 from bs4 import BeautifulSoup
+import re
 
 app = Flask(__name__)
 
-# Lista miast
+# Miasta (z kodami Finn.no)
 cities = {
     "Oslo": "0.20061",
     "Bergen": "0.23346",
@@ -17,19 +18,19 @@ cities = {
     "Drammen": "0.20174"
 }
 
-# Kategorie
+# Kategorie (mieszkania, domy, działki)
 categories = {
     "leiligheter": "1",
     "eneboliger": "2",
     "tomter": "3"
 }
 
-# Nagłówki HTTP (udajemy przeglądarkę)
+# Nagłówki HTTP – udajemy przeglądarkę
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
 }
 
-# Scraper FINN.no – NOWY sposób
+# Scraper FINN.no – działa z meta tagiem "description"
 def scrape_finn(city_code, category_code):
     url = f"https://www.finn.no/realestate/homes/search.html?location={city_code}&property_type={category_code}"
     try:
@@ -39,15 +40,15 @@ def scrape_finn(city_code, category_code):
         meta = soup.find("meta", {"name": "description"})
         if meta:
             content = meta.get("content", "")
-            for part in content.split():
-                part = part.replace(" ", "")
-                if part.isdigit():
-                    return int(part)
+            match = re.search(r"Du finner ([\d\s\u00a0]+) boliger", content)
+            if match:
+                number_str = match.group(1).replace("\xa0", "").replace(" ", "")
+                return int(number_str)
     except Exception as e:
         print(f"Finn scraping error: {e}")
     return 0
 
-# Scraper Hjem.no (z nagłówkiem + debug)
+# Scraper Hjem.no – może nadal zwracać 0
 def scrape_hjem(city_name, category_name):
     cat_map = {
         "leiligheter": "leilighet",
@@ -67,7 +68,7 @@ def scrape_hjem(city_name, category_name):
         print(f"Hjem scraping error: {e}")
     return 0
 
-# Funkcja scrapująca dane
+# Główna funkcja scrapująca dane
 def scrape_data():
     today = datetime.date.today().isoformat()
     filename = "data.csv"
