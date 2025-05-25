@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 
-# Lista miast i odpowiadające im parametry lokalizacji (dla URLi)
+# Lista miast i odpowiadające im parametry lokalizacji
 cities = {
     "Oslo": "0.20061",
     "Bergen": "0.23346",
@@ -17,18 +17,23 @@ cities = {
     "Drammen": "0.20174"
 }
 
-# Kategorie: leiligheter=1, eneboliger=2, tomter=3
+# Kategorie
 categories = {
     "leiligheter": "1",
     "eneboliger": "2",
     "tomter": "3"
 }
 
-# Scraper dla Finn.no – z meta tagu description
+# Nagłówki HTTP (udajemy przeglądarkę)
+headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+}
+
+# Scraper dla Finn.no
 def scrape_finn(city_code, category_code):
     url = f"https://www.finn.no/realestate/homes/search.html?location={city_code}&property_type={category_code}"
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         meta_tag = soup.find("meta", {"name": "description"})
@@ -50,7 +55,7 @@ def scrape_hjem(city_name, category_name):
     category_slug = cat_map.get(category_name, category_name)
     url = f"https://www.hjem.no/kjop/{city_name.lower()}/{category_slug}"
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         header = soup.find("h2")
@@ -115,5 +120,5 @@ def force_scrape():
     scrape_data()
     return "Scraping completed manually."
 
-# NIE URUCHAMIAMY app.run() – Render używa gunicorn app:app
+# Render używa gunicorn app:app
 scrape_data()
