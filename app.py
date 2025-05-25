@@ -113,6 +113,5 @@ def force_scrape():
     scrape_data()
     return "Scraping completed manually."
 
-if __name__ == "__main__":
-    scrape_data()
-    app.run(debug=True)
+# NIE URUCHAMIAMY app.run() – Render używa gunicorn app:app
+scrape_data()
