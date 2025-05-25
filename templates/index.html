@@ -2,168 +2,134 @@
 <html lang="no">
 <head>
   <meta charset="UTF-8" />
-  <title>Boliger til salgs i Norge</title>
+  <title>Boliger til salgs – OLX-stil</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body {
-      font-family: sans-serif;
-      margin: 0;
-      padding: 30px;
-      background: #f7f7f7;
-    }
-    h1 {
-      margin-bottom: 10px;
-    }
-    select {
-      margin-right: 10px;
-      padding: 6px;
-      font-size: 1rem;
-    }
-    .stats {
-      margin-bottom: 20px;
-      background: white;
-      padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.05);
-      max-width: 300px;
-    }
-    canvas {
-      background: white;
-      padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.05);
-      margin-bottom: 40px;
-    }
+    body { font-family: sans-serif; margin: 30px; background: #f7f7f7; }
+    .controls { display: flex; gap: 20px; margin-bottom: 20px; }
+    select, button { padding: 8px; font-size: 14px; }
+    .stats { display: flex; gap: 20px; margin-bottom: 20px; }
+    .stat { background: white; padding: 12px; border-radius: 8px; box-shadow: 0 0 6px rgba(0,0,0,0.1); }
+    canvas { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 0 10px rgba(0,0,0,0.05); width: 100% !important; height: 400px !important; }
   </style>
 </head>
 <body>
-  <h1>Boliger til salgs i Norge</h1>
+  <h1>Totalt antall boliger til salgs</h1>
 
-  <div>
-    <label>By:
-      <select id="cityFilter">
-        <option value="ALL">Alle</option>
-      </select>
-    </label>
-    <label>Kategori:
-      <select id="categoryFilter">
-        <option value="ALL">Alle</option>
-        <option value="leiligheter">Leiligheter</option>
-        <option value="eneboliger">Eneboliger</option>
-        <option value="tomter">Tomter</option>
-      </select>
-    </label>
+  <div class="controls">
+    <select id="cityFilter">
+      <option value="ALL">Alle byer</option>
+      <option>Oslo</option>
+      <option>Bergen</option>
+      <option>Stavanger</option>
+      <option>Trondheim</option>
+      <option>Drammen</option>
+    </select>
+    <select id="catFilter">
+      <option value="ALL">Alle kategorier</option>
+      <option value="leiligheter">Leiligheter</option>
+      <option value="eneboliger">Eneboliger</option>
+      <option value="tomter">Tomter</option>
+    </select>
+    <button id="refresh">Oppdater</button>
   </div>
 
   <div class="stats">
-    <p><strong>ATH:</strong> <span id="ath">–</span></p>
-    <p><strong>Endring daglig:</strong> <span id="daily">–</span></p>
-    <p><strong>Endring ukentlig:</strong> <span id="weekly">–</span></p>
-    <p><strong>Endring månedlig:</strong> <span id="monthly">–</span></p>
-    <p><strong>Endring årlig:</strong> <span id="yearly">–</span></p>
+    <div class="stat"><strong>ATH:</strong> <span id="stat-ath">–</span></div>
+    <div class="stat"><strong>Daglig:</strong> <span id="stat-daily">–</span></div>
+    <div class="stat"><strong>Ukentlig:</strong> <span id="stat-weekly">–</span></div>
+    <div class="stat"><strong>Månedlig:</strong> <span id="stat-monthly">–</span></div>
+    <div class="stat"><strong>Årlig:</strong> <span id="stat-yearly">–</span></div>
   </div>
 
-  <canvas id="totalChart"></canvas>
-  <canvas id="finnChart"></canvas>
-  <canvas id="hjemChart"></canvas>
+  <canvas id="chart"></canvas>
 
   <script>
-    let rawData = [];
-
     async function loadData() {
       const res = await fetch('/data');
-      rawData = await res.json();
-      const cities = [...new Set(rawData.map(r => r.city))];
-      const citySelect = document.getElementById('cityFilter');
-      cities.forEach(c => {
-        const opt = document.createElement('option');
-        opt.value = c;
-        opt.textContent = c;
-        citySelect.appendChild(opt);
-      });
-      renderAll();
+      const raw = await res.json();
+      return raw.map(r => ({
+        date: r.date,
+        city: r.city,
+        category: r.category,
+        finn: +r.finn,
+        hjem: +r.hjem,
+        total: +r.total
+      }));
     }
 
-    function filterData() {
-      const city = document.getElementById('cityFilter').value;
-      const category = document.getElementById('categoryFilter').value;
-      return rawData.filter(row =>
-        (city === 'ALL' || row.city === city) &&
-        (category === 'ALL' || row.category === category)
+    function filterData(data, city, cat) {
+      return data.filter(d =>
+        (city === 'ALL' || d.city === city) &&
+        (cat === 'ALL' || d.category === cat)
       );
     }
 
-    function groupByDate(data, key) {
-      const result = {};
-      data.forEach(row => {
-        if (!result[row.date]) result[row.date] = 0;
-        result[row.date] += Number(row[key]);
+    function aggregate(data) {
+      const byDate = {};
+      data.forEach(d => {
+        if (!byDate[d.date]) byDate[d.date] = { finn:0, hjem:0, total:0 };
+        byDate[d.date].finn += d.finn;
+        byDate[d.date].hjem += d.hjem;
+        byDate[d.date].total += d.total;
       });
-      const labels = Object.keys(result).sort();
-      const values = labels.map(l => result[l]);
-      return { labels, values };
+      const dates = Object.keys(byDate).sort();
+      return {
+        labels: dates,
+        finn: dates.map(d => byDate[d].finn),
+        hjem: dates.map(d => byDate[d].hjem),
+        total: dates.map(d => byDate[d].total)
+      };
     }
 
-    function getChange(values, days) {
-      const last = values.at(-1);
-      const prev = values.at(-1 - days);
-      if (prev === undefined) return '–';
-      const diff = last - prev;
-      const sign = diff > 0 ? '+' : '';
-      return sign + diff.toLocaleString('no-NO');
+    function calcStats(series) {
+      const arr = series.total;
+      const n = arr.length;
+      if (n === 0) return {};
+      const ath = Math.max(...arr);
+      const last = arr[n-1];
+      function ch(days) {
+        if (n-1-days < 0) return '–';
+        const diff = last - arr[n-1-days];
+        return (diff>0?'+':'') + diff;
+      }
+      return {
+        ath, daily:ch(1), weekly:ch(7), monthly:ch(30), yearly:ch(365)
+      };
     }
 
-    function updateStats(totalValues) {
-      document.getElementById('ath').textContent = Math.max(...totalValues).toLocaleString('no-NO');
-      document.getElementById('daily').textContent = getChange(totalValues, 1);
-      document.getElementById('weekly').textContent = getChange(totalValues, 7);
-      document.getElementById('monthly').textContent = getChange(totalValues, 30);
-      document.getElementById('yearly').textContent = getChange(totalValues, 365);
+    let chart;
+    async function draw() {
+      const raw = await loadData();
+      const city = document.getElementById('cityFilter').value;
+      const cat  = document.getElementById('catFilter').value;
+      const filtered = filterData(raw, city, cat);
+      const series = aggregate(filtered);
+      const stats = calcStats(series);
+
+      document.getElementById('stat-ath').textContent = stats.ath ?? '–';
+      document.getElementById('stat-daily').textContent = stats.daily ?? '–';
+      document.getElementById('stat-weekly').textContent = stats.weekly ?? '–';
+      document.getElementById('stat-monthly').textContent = stats.monthly ?? '–';
+      document.getElementById('stat-yearly').textContent = stats.yearly ?? '–';
+
+      const data = {
+        labels: series.labels,
+        datasets: [
+          { label:'Finn.no', data:series.finn, borderColor:'blue', fill:false, tension:0.1 },
+          { label:'Hjem.no', data:series.hjem, borderColor:'green', fill:false, tension:0.1 },
+          { label:'Totalt', data:series.total, borderColor:'pink', backgroundColor:'rgba(255,192,203,0.2)', fill:true, tension:0.1 }
+        ]
+      };
+
+      const cfg = { type:'line', data, options:{ responsive:true, scales:{ x:{ grid:false }, y:{ grid:false } } } };
+
+      if (chart) chart.destroy();
+      chart = new Chart(document.getElementById('chart').getContext('2d'), cfg);
     }
 
-    let totalChart, finnChart, hjemChart;
-    function drawChart(id, label, color, labels, values) {
-      const ctx = document.getElementById(id).getContext('2d');
-      if (window[id]) window[id].destroy();
-      window[id] = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels,
-          datasets: [{
-            label,
-            data: values,
-            borderColor: color,
-            backgroundColor: color === 'pink' ? 'rgba(255,192,203,0.2)' : 'transparent',
-            fill: color === 'pink',
-            tension: 0.1
-          }]
-        },
-        options: {
-          responsive: true,
-          scales: {
-            x: { grid: { display: false } },
-            y: { grid: { display: false } }
-          },
-          plugins: { legend: { display: true } }
-        }
-      });
-    }
-
-    function renderAll() {
-      const data = filterData();
-      const total = groupByDate(data, 'total');
-      const finn = groupByDate(data, 'finn');
-      const hjem = groupByDate(data, 'hjem');
-
-      updateStats(total.values);
-      drawChart('totalChart', 'Totalt (Finn + Hjem)', 'pink', total.labels, total.values);
-      drawChart('finnChart', 'Finn.no', 'blue', finn.labels, finn.values);
-      drawChart('hjemChart', 'Hjem.no', 'green', hjem.labels, hjem.values);
-    }
-
-    document.getElementById('cityFilter').addEventListener('change', renderAll);
-    document.getElementById('categoryFilter').addEventListener('change', renderAll);
-    loadData();
+    document.getElementById('refresh').addEventListener('click', draw);
+    window.addEventListener('load', draw);
   </script>
 </body>
 </html>
