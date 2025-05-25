@@ -1,6 +1,6 @@
 from flask import Flask, render_template, jsonify
 from apscheduler.schedulers.background import BackgroundScheduler
-import csv, datetime, os, requests, re, threading, urllib3
+import csv, datetime, os, requests, re, threading, urllib3, json
 from bs4 import BeautifulSoup
 
 app = Flask(__name__)
@@ -8,6 +8,7 @@ app = Flask(__name__)
 # Wyłącz ostrzeżenia SSL
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# “Norge” + 5 największych regionów (kody Finn.no)
 cities = {
     "Norge":           "",
     "Oslo":            "0.20061",
@@ -45,7 +46,6 @@ def scrape_finn(city_code, cat_code):
     return 0
 
 def scrape_hjem(city_name, category_name):
-    # budujemy slug dla Hjem
     slug = {"leiligheter":"leilighet","eneboliger":"enebolig","tomter":"tomt"}[category_name]
     if city_name == "Norge":
         url = f"https://www.hjem.no/kjop/{slug}"
@@ -55,14 +55,25 @@ def scrape_hjem(city_name, category_name):
         r = requests.get(url, headers=headers, timeout=10, verify=False)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
-        # szukamy meta description
-        meta = soup.find("meta", {"name": "description"}) or soup.find("meta", {"property": "og:description"})
-        if meta:
-            txt = meta.get("content", "")
-            # wyciągamy pierwszą grupę cyfr
+
+        # 1) meta description
+        meta = soup.find("meta", {"name": "description"})
+        if meta and "annonser" in meta.get("content",""):
+            txt = meta["content"]
             m = re.search(r"([\d\s\u00a0]+)", txt)
             if m:
                 return int(m.group(1).replace("\xa0","").replace(" ",""))
+
+        # 2) JSON-LD fallback
+        ld = soup.find("script", type="application/ld+json")
+        if ld:
+            try:
+                j = json.loads(ld.string)
+                if isinstance(j, dict) and j.get("numberOfItems"):
+                    return int(j["numberOfItems"])
+            except Exception:
+                pass
+
     except Exception as e:
         print(f"[Hjem] {url} error: {e}")
     return 0
@@ -89,7 +100,7 @@ def scrape_data():
                     "total": finn_cnt + hjem_cnt
                 })
 
-# harmonogram
+# Harmonogram codzienny o 6:00
 scheduler = BackgroundScheduler()
 scheduler.add_job(scrape_data, 'cron', hour=6)
 scheduler.start()
@@ -104,10 +115,9 @@ def data():
         return jsonify(list(csv.DictReader(f)))
 
 @app.route("/force-scrape")
-def force():
-    # uruchom w tle żeby nie blokować
+def force_scrape():
     threading.Thread(target=scrape_data).start()
     return "Scraping uruchomiony w tle.", 202
 
-# przy starcie
+# Przy starcie
 scrape_data()
