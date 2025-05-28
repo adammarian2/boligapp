@@ -3,3 +3,4 @@ gunicorn
 APScheduler
 requests
 beautifulsoup4
+pandas
