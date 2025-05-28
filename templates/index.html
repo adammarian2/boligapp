@@ -1,90 +1,53 @@
 <!DOCTYPE html>
-<html>
+<html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>Ogłoszenia Finn i Hjem</title>
+    <title>Ogłoszenia FINN</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { font-family: sans-serif; padding: 20px; }
-        canvas { max-width: 100%; margin-bottom: 30px; }
+        canvas { max-width: 100%; margin-top: 30px; }
     </style>
 </head>
 <body>
-    <h1>Ogłoszenia Finn i Hjem</h1>
-
+    <h1>Ogłoszenia z FINN.no</h1>
     <form method="get" action="/">
         <label for="city">Wybierz region:</label>
         <select name="city" id="city" onchange="this.form.submit()">
             {% for r in regions %}
-                <option value="{{ r }}" {% if r == selected_region %}selected{% endif %}>{{ r }}</option>
+                <option value="{{ r }}" {% if r==selected_region %}selected{% endif %}>
+                  {{ r }}
+                </option>
             {% endfor %}
         </select>
     </form>
 
-    <h2>Finn</h2>
+    <h2>Wykres FINN</h2>
     <canvas id="finnChart" height="100"></canvas>
-
-    <h2>Hjem</h2>
-    <canvas id="hjemChart" height="100"></canvas>
-
-    <h2>Razem</h2>
-    <canvas id="sumChart" height="100"></canvas>
 
     <script>
         const labels = {{ dates|tojson }};
-        const finnData = {{ finn_counts|tojson }};
-        const hjemData = {{ hjem_counts|tojson }};
-        const totalData = {{ total_counts|tojson }};
+        const data   = {{ counts|tojson }};
+        const ctx    = document.getElementById('finnChart').getContext('2d');
 
-        const finnCtx = document.getElementById('finnChart').getContext('2d');
-        const hjemCtx = document.getElementById('hjemChart').getContext('2d');
-        const sumCtx  = document.getElementById('sumChart' ).getContext('2d');
-
-        // gradienty
-        const gFinn = finnCtx.createLinearGradient(0,0,0,400);
-        gFinn.addColorStop(0,'rgba(0,0,255,0.3)');
-        gFinn.addColorStop(1,'rgba(0,0,255,0)');
-        const gHjem = hjemCtx.createLinearGradient(0,0,0,400);
-        gHjem.addColorStop(0,'rgba(0,128,0,0.3)');
-        gHjem.addColorStop(1,'rgba(0,128,0,0)');
-        const gSum = sumCtx.createLinearGradient(0,0,0,400);
-        gSum.addColorStop(0,'rgba(153,102,255,0.3)');
-        gSum.addColorStop(1,'rgba(153,102,255,0)');
-
-        new Chart(finnCtx,{
-            type:'line',
-            data:{ labels, datasets:[{
-                label:'Finn',
-                data:finnData,
-                borderColor:'blue',
-                backgroundColor:gFinn,
-                fill:true, tension:0.3
-            }]},
-            options:{ scales:{ x:{title:{display:true,text:'Data'}}, y:{title:{display:true,text:'Liczba'}}}}
-        });
-
-        new Chart(hjemCtx,{
-            type:'line',
-            data:{ labels, datasets:[{
-                label:'Hjem',
-                data:hjemData,
-                borderColor:'green',
-                backgroundColor:gHjem,
-                fill:true, tension:0.3
-            }]},
-            options:{ scales:{ x:{title:{display:true,text:'Data'}}, y:{title:{display:true,text:'Liczba'}}}}
-        });
-
-        new Chart(sumCtx,{
-            type:'line',
-            data:{ labels, datasets:[{
-                label:'Razem',
-                data:totalData,
-                borderColor:'magenta',
-                backgroundColor:gSum,
-                fill:true, tension:0.3
-            }]},
-            options:{ scales:{ x:{title:{display:true,text:'Data'}}, y:{title:{display:true,text:'Liczba'}}}}
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'FINN',
+                    data,
+                    borderColor: 'green',
+                    fill: false,
+                    tension: 0.3
+                }]
+            },
+            options: {
+                scales: {
+                    x: { title: { display: true, text: 'Data' } },
+                    y: { title: { display: true, text: 'Liczba ogłoszeń' } }
+                }
+            }
         });
     </script>
 </body>
