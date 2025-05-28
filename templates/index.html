@@ -1,140 +1,91 @@
 <!DOCTYPE html>
-<html lang="no">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <title>Boliger til salgs</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    body { font-family: sans-serif; margin: 30px; background: #f7f7f7; }
-    .controls { display: flex; gap: 20px; margin-bottom: 20px; }
-    select, button { padding: 8px; font-size: 14px; }
-    .charts { display: grid; grid-template-columns: 1fr; gap: 40px; }
-    .chart-block { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 0 10px rgba(0,0,0,0.05); }
-    .chart-block h2 { margin-bottom: 10px; }
-    canvas { width: 100% !important; height: 300px !important; }
-  </style>
+    <meta charset="UTF-8">
+    <title>Ogłoszenia Finn i Hjem</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        canvas { max-width: 100%; margin-bottom: 30px; }
+    </style>
 </head>
 <body>
-  <h1>Totalt antall boliger til salgs</h1>
+    <h1>Ogłoszenia Finn i Hjem</h1>
 
-  <div class="controls">
-    <select id="cityFilter">
-      <option>Norge</option>
-      <option>Oslo</option>
-      <option>Agder</option>
-      <option>Akershus</option>
-      <option>Møre og Romsdal</option>
-      <option>Trøndelag</option>
-    </select>
-    <select id="catFilter">
-      <option value="ALL">Alle kategorier</option>
-      <option value="leiligheter">Leiligheter</option>
-      <option value="eneboliger">Eneboliger</option>
-      <option value="tomter">Tomter</option>
-    </select>
-    <button id="refresh">Oppdater</button>
-  </div>
+    <form method="get" action="/">
+        <label for="city">Wybierz region:</label>
+        <select name="city" id="city" onchange="this.form.submit()">
+            {% for r in regions %}
+                <option value="{{ r }}" {% if r == selected_region %}selected{% endif %}>{{ r }}</option>
+            {% endfor %}
+        </select>
+    </form>
 
-  <div class="charts">
-    <div class="chart-block">
-      <h2>Finn.no</h2>
-      <canvas id="chartFinn"></canvas>
-    </div>
-    <div class="chart-block">
-      <h2>Hjem.no</h2>
-      <canvas id="chartHjem"></canvas>
-    </div>
-    <div class="chart-block">
-      <h2>Totalt</h2>
-      <canvas id="chartTotal"></canvas>
-    </div>
-  </div>
+    <h2>Finn</h2>
+    <canvas id="finnChart" height="100"></canvas>
 
-  <script>
-    async function loadData() {
-      const res = await fetch('/data');
-      const raw = await res.json();
-      console.log('raw data:', raw);
-      return raw.map(r => ({
-        date: r.date,
-        city: r.city,
-        category: r.category,
-        finn: +r.finn,
-        hjem: +r.hjem,
-        total: +r.total
-      }));
-    }
+    <h2>Hjem</h2>
+    <canvas id="hjemChart" height="100"></canvas>
 
-    function filterData(data, city, cat) {
-      return data.filter(d =>
-        d.city === city &&
-        (cat === 'ALL' || d.category === cat)
-      );
-    }
+    <h2>Razem</h2>
+    <canvas id="sumChart" height="100"></canvas>
 
-    function aggregate(data) {
-      const byDate = {};
-      data.forEach(d => {
-        if (!byDate[d.date]) byDate[d.date] = { finn:0, hjem:0, total:0 };
-        byDate[d.date].finn += d.finn;
-        byDate[d.date].hjem += d.hjem;
-        byDate[d.date].total += d.total;
-      });
-      const dates = Object.keys(byDate).sort();
-      const series = {
-        labels: dates,
-        finn: dates.map(d => byDate[d].finn),
-        hjem: dates.map(d => byDate[d].hjem),
-        total: dates.map(d => byDate[d].total)
-      };
-      console.log('series:', series);
-      return series;
-    }
+    <script>
+        const labels = {{ dates|tojson }};
+        const finnData = {{ finn_counts|tojson }};
+        const hjemData = {{ hjem_counts|tojson }};
+        const totalData = {{ total_counts|tojson }};
 
-    let chartFinn, chartHjem, chartTotal;
+        const finnCtx = document.getElementById('finnChart').getContext('2d');
+        const hjemCtx = document.getElementById('hjemChart').getContext('2d');
+        const sumCtx  = document.getElementById('sumChart' ).getContext('2d');
 
-    async function draw() {
-      const raw = await loadData();
-      const city = document.getElementById('cityFilter').value;
-      const cat  = document.getElementById('catFilter').value;
-      const filtered = filterData(raw, city, cat);
-      const s = aggregate(filtered);
+        // gradienty
+        const gFinn = finnCtx.createLinearGradient(0,0,0,400);
+        gFinn.addColorStop(0,'rgba(0,0,255,0.3)');
+        gFinn.addColorStop(1,'rgba(0,0,255,0)');
+        const gHjem = hjemCtx.createLinearGradient(0,0,0,400);
+        gHjem.addColorStop(0,'rgba(0,128,0,0.3)');
+        gHjem.addColorStop(1,'rgba(0,128,0,0)');
+        const gSum = sumCtx.createLinearGradient(0,0,0,400);
+        gSum.addColorStop(0,'rgba(153,102,255,0.3)');
+        gSum.addColorStop(1,'rgba(153,102,255,0)');
 
-      const makeCfg = (label, dataArr, color, fill=false) => ({
-        type: 'line',
-        data: {
-          labels: s.labels,
-          datasets: [{
-            label,
-            data: dataArr,
-            borderColor: color,
-            backgroundColor: fill ? color + '33' : undefined,
-            fill,
-            tension: 0.1,
-            pointRadius: 5
-          }]
-        },
-        options: {
-          responsive: true,
-          scales: {
-            x: { grid: false },
-            y: { grid: false, beginAtZero: true }
-          }
-        }
-      });
+        new Chart(finnCtx,{
+            type:'line',
+            data:{ labels, datasets:[{
+                label:'Finn',
+                data:finnData,
+                borderColor:'blue',
+                backgroundColor:gFinn,
+                fill:true, tension:0.3
+            }]},
+            options:{ scales:{ x:{title:{display:true,text:'Data'}}, y:{title:{display:true,text:'Liczba'}}}}
+        });
 
-      [chartFinn, chartHjem, chartTotal].forEach(c => c && c.destroy());
+        new Chart(hjemCtx,{
+            type:'line',
+            data:{ labels, datasets:[{
+                label:'Hjem',
+                data:hjemData,
+                borderColor:'green',
+                backgroundColor:gHjem,
+                fill:true, tension:0.3
+            }]},
+            options:{ scales:{ x:{title:{display:true,text:'Data'}}, y:{title:{display:true,text:'Liczba'}}}}
+        });
 
-      chartFinn  = new Chart(document.getElementById('chartFinn').getContext('2d'),
-                             makeCfg('Finn.no',  s.finn,  'blue'));
-      chartHjem  = new Chart(document.getElementById('chartHjem').getContext('2d'),
-                             makeCfg('Hjem.no',  s.hjem,  'green'));
-      chartTotal = new Chart(document.getElementById('chartTotal').getContext('2d'),
-                             makeCfg('Totalt',   s.total, 'pink', true));
-    }
-
-    document.getElementById('refresh').addEventListener('click', draw);
-    window.addEventListener('load', draw);
-  </script>
+        new Chart(sumCtx,{
+            type:'line',
+            data:{ labels, datasets:[{
+                label:'Razem',
+                data:totalData,
+                borderColor:'magenta',
+                backgroundColor:gSum,
+                fill:true, tension:0.3
+            }]},
+            options:{ scales:{ x:{title:{display:true,text:'Data'}}, y:{title:{display:true,text:'Liczba'}}}}
+        });
+    </script>
 </body>
 </html>
