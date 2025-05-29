@@ -1,65 +1,105 @@
-import requests
 import csv
 import datetime
 import os
+import requests
 from bs4 import BeautifulSoup
 
+# Ścieżka do CSV z danymi
 DATA_PATH = "data.csv"
 
-# kody regionów dla FINN.no
-REGION_CODES = {
+# Kody regionów dla Finn
+FINN_REGIONS = {
     "Norge": None,
     "Oslo": "0.20061",
     "Agder": "0.22042",
     "Akershus": "0.20003",
     "Møre og Romsdal": "0.20015",
-    "Trøndelag": "0.20016"
+    "Trøndelag": "0.20016",
 }
 
-# Kategorie FINN: (kod)
+# Kategorie: (kod Finn, slug Hjem)
 CATEGORIES = {
-    "leiligheter": "1",
-    "eneboliger": "2",
-    "tomter":       "3"
+    "leiligheter": ("1", "leilighet"),
+    "eneboliger": ("2", "enebolig"),
+    "tomter": ("3", "tomt"),
 }
 
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/json",
+}
+
 
 def scrape_finn(region_code, category_code):
-    """Zwraca liczbę ogłoszeń z FINN.no."""
     url = f"https://www.finn.no/realestate/homes/search.html?property_type={category_code}"
     if region_code:
         url += f"&location={region_code}"
-    r = requests.get(url, headers=HEADERS, timeout=10)
-    r.raise_for_status()
-    soup = BeautifulSoup(r.text, "html.parser")
-    meta = soup.find("meta", {"name": "description"})
-    if meta and "annonser" in meta["content"]:
-        raw = meta["content"].split(" annonser")[0]
-        digits = "".join(filter(str.isdigit, raw))
-        return int(digits) if digits else 0
+    try:
+        r = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+        meta = soup.find("meta", {"name": "description"})
+        if meta and "boliger" in meta["content"]:
+            num = "".join(filter(str.isdigit, meta["content"].split(" ")[0]))
+            return int(num)
+    except Exception as e:
+        print("[Finn]", url, "error:", e)
     return 0
 
-def scrape_data():
-    """Dokleja do data.csv po jednej linii (date, city, category, finn)."""
+
+def scrape_hjem(region_name, category_slug):
+    """
+    Pobiera liczbę ofert z Hjem API. Jeśli region_name == "Norge", pomija parametr region.
+    """
+    api_url = "https://hjem.no/api/v1/listings/search"
+    params = {
+        "availability": "available",
+        "propertyType": category_slug,
+        "pageSize": 1,
+        "page": 1,
+    }
+    if region_name != "Norge":
+        # slugify regiony: usuń norweskie znaki i zamień spacje na '-'
+        slug = region_name.lower()
+        for c, r in [("æ","ae"),("ø","o"),("å","a")]:
+            slug = slug.replace(c, r)
+        slug = slug.replace(" ", "-")
+        params["region"] = slug
+
+    try:
+        r = requests.get(api_url, params=params, headers=HEADERS, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        # odpowiedź: data["pagination"]["totalElements"]
+        return data.get("pagination", {}).get("totalElements", 0)
+    except Exception as e:
+        print("[Hjem-API]", api_url, "params=", params, "error:", e)
+    return 0
+
+
+def save_data():
+    """Grabisz dane z Finn i Hjem i dorzucasz do data.csv."""
     today = datetime.date.today().isoformat()
-    # jeśli nie ma pliku, stwórz nagłówki
-    if not os.path.exists(DATA_PATH):
-        with open(DATA_PATH, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=["date","city","category","finn"])
+    fn = DATA_PATH
+    fieldnames = ["date", "city", "category", "finn", "hjem", "total"]
+
+    # jeśli nie ma pliku, stwórz nagłówek
+    if not os.path.exists(fn):
+        with open(fn, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
 
-    with open(DATA_PATH, "a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["date","city","category","finn"])
-        for region, code in REGION_CODES.items():
-            for cat, cat_code in CATEGORIES.items():
-                cnt = scrape_finn(code, cat_code)
+    with open(fn, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        for region, code in FINN_REGIONS.items():
+            for cat, (finn_code, hjem_slug) in CATEGORIES.items():
+                fcnt = scrape_finn(code, finn_code)
+                hcnt = scrape_hjem(region, hjem_slug)
                 writer.writerow({
                     "date": today,
                     "city": region,
                     "category": cat,
-                    "finn": cnt
+                    "finn": fcnt,
+                    "hjem": hcnt,
+                    "total": fcnt + hcnt
                 })
-
-if __name__ == "__main__":
-    scrape_data()
