@@ -1,63 +1,59 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <title>Ogłoszenia FINN + Hjem</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        body { font-family: sans-serif; padding: 20px; }
-        canvas { max-width: 100%; margin-bottom: 30px; }
-    </style>
+  <meta charset="UTF-8">
+  <title>Ogłoszenia FINN + Hjem</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: sans-serif; padding:20px; }
+    canvas { max-width: 100%; margin-bottom:30px; }
+  </style>
 </head>
 <body>
-    <h1>Ogłoszenia FINN + Hjem</h1>
-    <form>
-        <label>Region:
-          <select name="city" onchange="this.form.submit()">
-            {% for r in regions %}
-              <option value="{{r}}" {% if r==selected %}selected{% endif %}>{{r}}</option>
-            {% endfor %}
-          </select>
-        </label>
-    </form>
+  <h1>Ogłoszenia FINN + Hjem</h1>
+  <form>
+    <label>Region:
+      <select name="city" onchange="this.form.submit()">
+        {% for r in regions %}
+          <option value="{{r}}" {% if r==selected %}selected{% endif %}>
+            {{r}}
+          </option>
+        {% endfor %}
+      </select>
+    </label>
+  </form>
 
-    <h2>FINN</h2>
-    <canvas id="finnChart" height="100"></canvas>
+  <h2>FINN</h2>
+  <canvas id="finnChart" height="100"></canvas>
 
-    <h2>Hjem</h2>
-    <canvas id="hjemChart" height="100"></canvas>
+  <h2>Hjem</h2>
+  <canvas id="hjemChart" height="100"></canvas>
 
-    <h2>Suma</h2>
-    <canvas id="sumChart" height="100"></canvas>
+  <h2>Suma</h2>
+  <canvas id="sumChart" height="100"></canvas>
 
-    <script>
-      const labels = {{ dates|tojson }};
-      const finnData = {{ finn_counts|tojson }};
-      const hjemData = {{ hjem_counts|tojson }};
-      const sumData  = {{ total_counts|tojson }};
+  <script>
+    const labels     = {{ dates|tojson }};
+    const finnData   = {{ finn_counts|tojson }};
+    const hjemData   = {{ hjem_counts|tojson }};
+    const sumData    = {{ total_counts|tojson }};
 
-      function draw(id, label, data, color) {
-        const ctx = document.getElementById(id).getContext('2d');
-        new Chart(ctx, {
-          type:'line',
-          data:{ labels, datasets:[{
-            label, data,
-            borderColor: color,
-            fill:false,
-            tension:0.3
-          }]},
-          options:{
-            scales:{
-              x:{ title:{ display:true, text:'Data' } },
-              y:{ title:{ display:true, text:'Ilość' } }
-            }
+    function draw(id, label, data, color){
+      const ctx = document.getElementById(id).getContext('2d');
+      new Chart(ctx,{ type:'line',
+        data:{ labels, datasets:[{ label, data, borderColor:color, fill:false, tension:0.3 }]},
+        options:{
+          scales:{
+            x:{ title:{ display:true, text:'Data' } },
+            y:{ title:{ display:true, text:'Liczba' } }
           }
-        });
-      }
+        }
+      });
+    }
 
-      draw('finnChart', 'FINN', finnData, 'green');
-      draw('hjemChart', 'Hjem', hjemData, 'blue');
-      draw('sumChart',  'Suma', sumData,  'purple');
-    </script>
+    draw('finnChart','FINN',finnData,'green');
+    draw('hjemChart','Hjem',hjemData,'blue');
+    draw('sumChart','Suma', sumData,'purple');
+  </script>
 </body>
 </html>
