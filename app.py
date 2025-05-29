@@ -1,49 +1,51 @@
-from flask import Flask, render_template, jsonify, send_file, request
+from flask import Flask, render_template, request, send_file
 from apscheduler.schedulers.background import BackgroundScheduler
+import pandas as pd
 import os
-import csv
 import scrape
 
 app = Flask(__name__)
 
-# Przy starcie raz zebrane dane
-try:
-    scrape.save_data()
-except Exception as e:
-    print("Error initial scrape:", e)
+# on start scrape
+scrape.save_data()
 
-# Każdego dnia o 06:00 dopisujemy nowy rekord
-scheduler = BackgroundScheduler()
-scheduler.add_job(scrape.save_data, 'cron', hour=6, minute=0)
-scheduler.start()
+# schedule daily at 06:00
+sched = BackgroundScheduler()
+sched.add_job(scrape.save_data, "cron", hour=6, minute=0)
+sched.start()
 
-@app.route('/')
+@app.route("/")
 def index():
-    regions = list(scrape.REGION_CODES.keys())
-    selected = request.args.get('city', 'Norge')
-    return render_template('index.html',
-        regions=regions,
-        selected_region=selected
+    region = request.args.get("city", "Norge")
+    if not os.path.exists(scrape.DATA_PATH):
+        return "Waiting for first scrape..."
+    df = pd.read_csv(scrape.DATA_PATH, parse_dates=["date"])
+    df = df[df["city"] == region].sort_values("date")
+    dates = df["date"].dt.strftime("%Y-%m-%d").tolist()
+    finn_counts = df["finn"].tolist()
+    hjem_counts = df["hjem"].tolist()
+    total_counts = df["total"].tolist()
+    return render_template(
+        "index.html",
+        regions=list(scrape.REGION_CODES.keys()),
+        selected_region=region,
+        dates=dates,
+        finn_counts=finn_counts,
+        hjem_counts=hjem_counts,
+        total_counts=total_counts
     )
 
-@app.route('/data')
+@app.route("/data")
 def data():
-    if not os.path.exists(scrape.DATA_PATH):
-        return jsonify([])
-    with open(scrape.DATA_PATH, newline='', encoding='utf-8') as f:
-        return jsonify(list(csv.DictReader(f)))
+    return send_file(scrape.DATA_PATH)
 
-@app.route('/export')
-def export():
-    return send_file(scrape.DATA_PATH, as_attachment=True)
-
-@app.route('/force-scrape')
+@app.route("/force-scrape")
 def force_scrape():
     try:
         scrape.save_data()
-        return "⚡ Scrape done", 200
+        return "⏱️ scrape triggered", 202
     except Exception as e:
-        return f"❌ Scrape error: {e}", 500
+        return f"Error: {e}", 500
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
