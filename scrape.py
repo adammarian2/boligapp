@@ -1,32 +1,14 @@
 import requests
 from bs4 import BeautifulSoup
-import datetime
-import csv
-import os
-import unicodedata
+import csv, os, datetime, re
 
-# Ścieżka do pliku z danymi
+# ścieżka do CSV
 DATA_PATH = "data.csv"
 
-# Nagłówki dla obu serwisów
-HEADERS_JSON = {
-    "User-Agent": "Mozilla/5.0",
-    "Accept": "application/json, text/plain, */*",
-    "X-Requested-With": "XMLHttpRequest"
-}
-HEADERS_HTML = {
-    "User-Agent": "Mozilla/5.0"
-}
+# nagłówki
+HEADERS_HTML = {"User-Agent": "Mozilla/5.0"}
 
-# Mapowania regionów i kategorii
-REGION_SLUGS = {
-    "Norge": None,
-    "Oslo": "oslo",
-    "Agder": "agder",
-    "Akershus": "akershus",
-    "Møre og Romsdal": "more-og-romsdal",
-    "Trøndelag": "trondelag",
-}
+# mapowania regionów
 FINN_REGIONS = {
     "Norge": None,
     "Oslo": "0.20061",
@@ -35,15 +17,23 @@ FINN_REGIONS = {
     "Møre og Romsdal": "0.20015",
     "Trøndelag": "0.20016",
 }
+HJEM_SLUGS = {
+    "Norge": None,
+    "Oslo": "oslo",
+    "Agder": "agder",
+    "Akershus": "akershus",
+    "Møre og Romsdal": "more-og-romsdal",
+    "Trøndelag": "trondelag",
+}
+# kategorie: (finn_code, hjem_slug)
 CATEGORIES = {
     "leiligheter": ("1", "leilighet"),
-    "eneboliger": ("2", "enebolig"),
-    "tomter": ("3", "tomt"),
+    "eneboliger":  ("2", "enebolig"),
+    "tomter":      ("3", "tomt"),
 }
 
-def _only_digits(s: str) -> str:
-    """Usuń spacje, NBSP i inne, zostaw tylko cyfry."""
-    return "".join(ch for ch in s if ch.isdigit())
+def only_digits(s):
+    return re.sub(r"\D", "", s)
 
 def scrape_finn(region_code, category_code):
     url = f"https://www.finn.no/realestate/homes/search.html?property_type={category_code}"
@@ -52,87 +42,56 @@ def scrape_finn(region_code, category_code):
     try:
         r = requests.get(url, headers=HEADERS_HTML, timeout=10)
         r.raise_for_status()
-        soup = BeautifulSoup(r.text, "html.parser")
-        meta = soup.find("meta", {"name": "description"})
+        meta = BeautifulSoup(r.text, "html.parser") \
+               .find("meta", {"name": "description"})
         if meta and "boliger til salgs" in meta["content"]:
+            # np. "Du finner 4 169 boliger til salgs..."
             text = meta["content"].split("boliger til salgs")[0]
-            digits = _only_digits(text)
-            return int(digits)
+            digits = only_digits(text)
+            return int(digits) if digits else 0
     except Exception as e:
-        print("[Finn]", url, "error:", e)
+        print("[Finn] error:", e)
     return 0
 
-def scrape_hjem(region_name, category_slug):
-    """Pierwsza próba: API JSON. Jeśli się nie uda, fallback na statyczny HTML."""
-    params = {
-        "availability": "available",
-        "propertyType": category_slug,
-        "pageSize": 1,
-        "page": 1
-    }
-    slug = REGION_SLUGS.get(region_name)
+def scrape_hjem(region, category_slug):
+    # zawsze GET na /list?keywords=<slug>
+    slug = HJEM_SLUGS.get(region)
     if slug:
-        params["region"] = slug
-
-    # 1) Spróbuj API JSON
+        url = f"https://hjem.no/list?keywords={slug}"
+    else:
+        url = "https://hjem.no/list"
     try:
-        r = requests.get(
-            "https://hjem.no/api/v1/listings/search",
-            params=params,
-            headers=HEADERS_JSON,
-            timeout=10
-        )
-        if "application/json" in r.headers.get("Content-Type", ""):
-            j = r.json()
-            # najczęściej jest w meta.totalItems
-            count = j.get("meta", {}).get("totalItems") \
-                 or j.get("meta", {}).get("count")
-            if count is not None:
-                return int(count)
-    except Exception as e:
-        print("[Hjem-API]", e)
-
-    # 2) Fallback: statyczny HTML
-    try:
-        if slug:
-            url = f"https://hjem.no/list?keywords={slug}"
-        else:
-            url = "https://hjem.no/list"
         r = requests.get(url, headers=HEADERS_HTML, timeout=10)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
-        # wiele wersji: np. <h1>40 289 resultater</h1>
-        h1 = soup.find("h1")
-        if h1:
-            digits = _only_digits(h1.get_text())
-            return int(digits)
+        meta = soup.find("meta", {"name": "head:count"})
+        if meta and meta.get("content", "").isdigit():
+            return int(meta["content"])
     except Exception as e:
-        print("[Hjem-HTML]", url, "error:", e)
-
+        print("[Hjem] error:", e)
     return 0
 
 def save_data():
     today = datetime.date.today().isoformat()
     # przygotuj plik
-    fields = ["date", "city", "category", "finn", "hjem", "total"]
+    headers = ["date","city","category","finn","hjem","total"]
     if not os.path.exists(DATA_PATH):
         with open(DATA_PATH, "w", newline="") as f:
-            csv.DictWriter(f, fieldnames=fields).writeheader()
-
-    # dopisz nowy wiersz
+            csv.DictWriter(f, fieldnames=headers).writeheader()
+    # dopisz
     with open(DATA_PATH, "a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fields)
+        writer = csv.DictWriter(f, fieldnames=headers)
         for city, finn_code in FINN_REGIONS.items():
-            for cat, (finn_cat, hjem_slug) in CATEGORIES.items():
-                finn_cnt = scrape_finn(finn_code, finn_cat)
-                hjem_cnt = scrape_hjem(city, hjem_slug)
+            for cat, (finn_cat, hjem_cat) in CATEGORIES.items():
+                fcnt = scrape_finn(finn_code, finn_cat)
+                hcnt = scrape_hjem(city, hjem_cat)
                 writer.writerow({
                     "date": today,
                     "city": city,
                     "category": cat,
-                    "finn": finn_cnt,
-                    "hjem": hjem_cnt,
-                    "total": finn_cnt + hjem_cnt
+                    "finn": fcnt,
+                    "hjem": hcnt,
+                    "total": fcnt + hcnt
                 })
 
 if __name__ == "__main__":
