@@ -2,53 +2,59 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>Ogłoszenia FINN</title>
+    <title>Ogłoszenia – Finn & Hjem</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { font-family: sans-serif; padding: 20px; }
-        canvas { max-width: 100%; margin-top: 30px; }
+        canvas { max-width: 100%; margin-bottom: 30px; }
     </style>
 </head>
 <body>
-    <h1>Ogłoszenia z FINN.no</h1>
-    <form method="get" action="/">
-        <label for="city">Wybierz region:</label>
-        <select name="city" id="city" onchange="this.form.submit()">
-            {% for r in regions %}
-                <option value="{{ r }}" {% if r==selected_region %}selected{% endif %}>
-                  {{ r }}
-                </option>
-            {% endfor %}
-        </select>
+    <h1>Porównanie oferty – Finn vs Hjem</h1>
+    <form>
+        <label>Region:
+            <select name="city" onchange="this.form.submit()">
+                {% for r in regions %}
+                    <option value="{{ r }}" {% if r == selected_region %}selected{% endif %}>{{ r }}</option>
+                {% endfor %}
+            </select>
+        </label>
     </form>
 
-    <h2>Wykres FINN</h2>
+    <h2>Finn.no</h2>
     <canvas id="finnChart" height="100"></canvas>
 
-    <script>
-        const labels = {{ dates|tojson }};
-        const data   = {{ counts|tojson }};
-        const ctx    = document.getElementById('finnChart').getContext('2d');
+    <h2>Hjem.no</h2>
+    <canvas id="hjemChart" height="100"></canvas>
 
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels,
-                datasets: [{
-                    label: 'FINN',
-                    data,
-                    borderColor: 'green',
-                    fill: false,
-                    tension: 0.3
-                }]
-            },
-            options: {
-                scales: {
-                    x: { title: { display: true, text: 'Data' } },
-                    y: { title: { display: true, text: 'Liczba ogłoszeń' } }
-                }
-            }
-        });
+    <h2>Razem</h2>
+    <canvas id="totalChart" height="100"></canvas>
+
+    <script>
+    const labels      = {{ dates|tojson }};
+    const finnData    = {{ finn_counts|tojson }};
+    const hjemData    = {{ hjem_counts|tojson }};
+    const totalData   = {{ total_counts|tojson }};
+
+    function makeChart(ctxId, label, data, color) {
+      const ctx = document.getElementById(ctxId).getContext('2d');
+      new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets:[
+          { label, data, borderColor: color, backgroundColor: 'transparent', tension: 0.3, pointRadius: 4 }
+        ]},
+        options: {
+          scales:{
+            x:{ title:{ display:true, text:'Data' } },
+            y:{ title:{ display:true, text:'Ilość ofert' } }
+          }
+        }
+      });
+    }
+
+    makeChart('finnChart',  'Finn.no', finnData, 'green');
+    makeChart('hjemChart',  'Hjem.no', hjemData, 'blue');
+    makeChart('totalChart', 'Razem',   totalData, 'magenta');
     </script>
 </body>
 </html>
