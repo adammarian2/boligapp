@@ -1,6 +1,6 @@
 Flask
-gunicorn
-APScheduler
 requests
 beautifulsoup4
+APScheduler
 pandas
+gunicorn
