@@ -1,60 +1,78 @@
 <!DOCTYPE html>
 <html lang="pl">
 <head>
-    <meta charset="UTF-8">
-    <title>Ogłoszenia – Finn & Hjem</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        body { font-family: sans-serif; padding: 20px; }
-        canvas { max-width: 100%; margin-bottom: 30px; }
-    </style>
+  <meta charset="UTF-8">
+  <title>Monitor ogłoszeń Finn & Hjem</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body{font-family:sans-serif;padding:2rem;}
+    canvas{max-width:100%;margin-bottom:2rem;}
+    select{padding:.5rem;font-size:1rem;}
+  </style>
 </head>
 <body>
-    <h1>Porównanie oferty – Finn vs Hjem</h1>
-    <form>
-        <label>Region:
-            <select name="city" onchange="this.form.submit()">
-                {% for r in regions %}
-                    <option value="{{ r }}" {% if r == selected_region %}selected{% endif %}>{{ r }}</option>
-                {% endfor %}
-            </select>
-        </label>
-    </form>
+  <h1>Monitor ogłoszeń Finn.no &amp; Hjem.no</h1>
 
-    <h2>Finn.no</h2>
-    <canvas id="finnChart" height="100"></canvas>
+  <form id="frm">
+    <label>Region:
+      <select name="region" onchange="loadData()">
+        {% for r in regions %}
+          <option value="{{r}}" {% if r==selected %}selected{% endif %}>{{r}}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </form>
 
-    <h2>Hjem.no</h2>
-    <canvas id="hjemChart" height="100"></canvas>
+  <canvas id="finnChart" height="100"></canvas>
+  <canvas id="hjemChart" height="100"></canvas>
+  <canvas id="sumChart"  height="100"></canvas>
 
-    <h2>Razem</h2>
-    <canvas id="totalChart" height="100"></canvas>
+  <script>
+    async function loadData(){
+      const region = document.querySelector('select[name=region]').value;
+      const resp = await fetch('/data');
+      const all = await resp.json();
+      // filtrujemy
+      const rows = all.filter(r => r.region===region);
+      // grupujemy po dacie
+      const byDate = {};
+      for(let r of rows){
+        if(!byDate[r.date]) byDate[r.date]={f:0,h:0};
+        byDate[r.date].f += +r.finn;
+        byDate[r.date].h += +r.hjem;
+      }
+      const dates = Object.keys(byDate).sort();
+      const finn = dates.map(d=>byDate[d].f);
+      const hjem = dates.map(d=>byDate[d].h);
+      const sum  = dates.map((_,i)=>finn[i]+hjem[i]);
 
-    <script>
-    const labels      = {{ dates|tojson }};
-    const finnData    = {{ finn_counts|tojson }};
-    const hjemData    = {{ hjem_counts|tojson }};
-    const totalData   = {{ total_counts|tojson }};
+      renderChart('finnChart', 'Finn.no', dates, finn, 'rgb(0,128,200)');
+      renderChart('hjemChart', 'Hjem.no', dates, hjem, 'rgb(200,0,100)');
+      renderChart('sumChart','Razem', dates, sum,  'rgb(0,150,0)');
+    }
 
-    function makeChart(ctxId, label, data, color) {
-      const ctx = document.getElementById(ctxId).getContext('2d');
-      new Chart(ctx, {
-        type: 'line',
-        data: { labels, datasets:[
-          { label, data, borderColor: color, backgroundColor: 'transparent', tension: 0.3, pointRadius: 4 }
-        ]},
-        options: {
+    function renderChart(id,label,labels,data,color){
+      const ctx = document.getElementById(id).getContext('2d');
+      if(window[id]) window[id].destroy();
+      window[id]= new Chart(ctx, {
+        type:'line',
+        data:{labels, datasets:[{
+          label, data,
+          borderColor: color,
+          backgroundColor: Chart.helpers.color(color).alpha(0.3).rgbString(),
+          fill:true, tension:0.2, pointRadius:4
+        }]},
+        options:{
           scales:{
-            x:{ title:{ display:true, text:'Data' } },
-            y:{ title:{ display:true, text:'Ilość ofert' } }
+            x:{title:{display:true,text:'Data'}},
+            y:{title:{display:true,text:'Liczba ogłoszeń'}}
           }
         }
       });
     }
 
-    makeChart('finnChart',  'Finn.no', finnData, 'green');
-    makeChart('hjemChart',  'Hjem.no', hjemData, 'blue');
-    makeChart('totalChart', 'Razem',   totalData, 'magenta');
-    </script>
+    // pierwsze wczytanie
+    loadData();
+  </script>
 </body>
 </html>
