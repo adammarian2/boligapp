@@ -2,109 +2,62 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Ogłoszenia FINN &amp; Hjem</title>
+    <title>Ogłoszenia FINN + Hjem</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-      body { font-family: sans-serif; padding:20px; }
-      canvas { max-width: 100%; margin-bottom: 30px; }
-      select { font-size: 1rem; padding: 0.3rem 0.5rem; }
+        body { font-family: sans-serif; padding: 20px; }
+        canvas { max-width: 100%; margin-bottom: 30px; }
     </style>
 </head>
 <body>
-  <h1>Ogłoszenia FINN &amp; Hjem</h1>
-  <form>
-    <label for="city">Region:</label>
-    <select id="city" name="city" onchange="this.form.submit()">
-      {% for r in regions %}
-        <option value="{{ r }}" {% if r==selected_region %}selected{% endif %}>{{ r }}</option>
-      {% endfor %}
-    </select>
-  </form>
+    <h1>Ogłoszenia FINN + Hjem</h1>
+    <form>
+        <label>Region:
+          <select name="city" onchange="this.form.submit()">
+            {% for r in regions %}
+              <option value="{{r}}" {% if r==selected %}selected{% endif %}>{{r}}</option>
+            {% endfor %}
+          </select>
+        </label>
+    </form>
 
-  <h2>FINN</h2>
-  <canvas id="finnChart" height="100"></canvas>
+    <h2>FINN</h2>
+    <canvas id="finnChart" height="100"></canvas>
 
-  <h2>Hjem</h2>
-  <canvas id="hjemChart" height="100"></canvas>
+    <h2>Hjem</h2>
+    <canvas id="hjemChart" height="100"></canvas>
 
-  <h2>Suma</h2>
-  <canvas id="sumChart" height="100"></canvas>
+    <h2>Suma</h2>
+    <canvas id="sumChart" height="100"></canvas>
 
-  <script>
-    const labels     = {{ dates|tojson }};
-    const finnData   = {{ finn_counts|tojson }};
-    const hjemData   = {{ hjem_counts|tojson }};
-    const sumData    = {{ total_counts|tojson }};
+    <script>
+      const labels = {{ dates|tojson }};
+      const finnData = {{ finn_counts|tojson }};
+      const hjemData = {{ hjem_counts|tojson }};
+      const sumData  = {{ total_counts|tojson }};
 
-    function makeGradient(ctx, c1, c2) {
-      const g = ctx.createLinearGradient(0,0,0,400);
-      g.addColorStop(0, c1);
-      g.addColorStop(1, c2);
-      return g;
-    }
-
-    // FINN (green)
-    const fctx = document.getElementById('finnChart').getContext('2d');
-    new Chart(fctx, {
-      type: 'line',
-      data: {
-        labels, datasets: [{
-          label: 'FINN',
-          data: finnData,
-          borderColor: 'green',
-          backgroundColor: makeGradient(fctx,'rgba(0,128,0,0.3)','rgba(0,128,0,0)'),
-          fill: true, tension:0.3
-        }]
-      },
-      options: {
-        scales: {
-          x:{ title:{display:true,text:'Data'} },
-          y:{ title:{display:true,text:'Ilość ogłoszeń'}, grid:{display:false} }
-        }
+      function draw(id, label, data, color) {
+        const ctx = document.getElementById(id).getContext('2d');
+        new Chart(ctx, {
+          type:'line',
+          data:{ labels, datasets:[{
+            label, data,
+            borderColor: color,
+            fill:false,
+            tension:0.3
+          }]},
+          options:{
+            scales:{
+              x:{ title:{ display:true, text:'Data' } },
+              y:{ title:{ display:true, text:'Ilość' } }
+            }
+          }
+        });
       }
-    });
 
-    // Hjem (blue)
-    const hctx = document.getElementById('hjemChart').getContext('2d');
-    new Chart(hctx, {
-      type: 'line',
-      data: {
-        labels, datasets: [{
-          label: 'Hjem',
-          data: hjemData,
-          borderColor: 'blue',
-          backgroundColor: makeGradient(hctx,'rgba(0,0,255,0.3)','rgba(0,0,255,0)'),
-          fill: true, tension:0.3
-        }]
-      },
-      options: {
-        scales: {
-          x:{ title:{display:true,text:'Data'} },
-          y:{ title:{display:true,text:'Ilość ogłoszeń'}, grid:{display:false} }
-        }
-      }
-    });
-
-    // Sum (magenta)
-    const sctx = document.getElementById('sumChart').getContext('2d');
-    new Chart(sctx, {
-      type: 'line',
-      data: {
-        labels, datasets: [{
-          label: 'SUMA',
-          data: sumData,
-          borderColor: 'magenta',
-          backgroundColor: makeGradient(sctx,'rgba(153,102,255,0.3)','rgba(153,102,255,0)'),
-          fill: true, tension:0.3
-        }]
-      },
-      options: {
-        scales: {
-          x:{ title:{display:true,text:'Data'} },
-          y:{ title:{display:true,text:'Ilość ogłoszeń'}, grid:{display:false} }
-        }
-      }
-    });
-  </script>
+      draw('finnChart', 'FINN', finnData, 'green');
+      draw('hjemChart', 'Hjem', hjemData, 'blue');
+      draw('sumChart',  'Suma', sumData,  'purple');
+    </script>
 </body>
 </html>
